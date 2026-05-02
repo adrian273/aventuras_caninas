@@ -346,21 +346,63 @@ export class Start extends Phaser.Scene {
 
     _createMobileButtons() {
         const S = 55;
-        const btn = (x, y, label, onDown, onUp) => {
+        const zones = [
+            { x: 80,   y: 640, key: 'left',  label: '←' },
+            { x: 210,  y: 640, key: 'right', label: '→' },
+            { x: 1190, y: 640, key: 'up',    label: '↑' },
+        ];
+        const bgMap = {};
+
+        zones.forEach(({ x, y, label, key }) => {
             const bg = this.add.graphics();
             bg.fillStyle(0xffffff, 0.15);
             bg.fillRoundedRect(-S, -S, S * 2, S * 2, 20);
             bg.lineStyle(3, 0xffffff, 0.5);
             bg.strokeRoundedRect(-S, -S, S * 2, S * 2, 20);
             const text = this.add.text(0, 0, label, { fontSize: '44px', color: '#ffffff', fontFamily: 'Arial' }).setOrigin(0.5);
-            const container = this.add.container(x, y, [bg, text]).setSize(S * 2, S * 2).setInteractive().setScrollFactor(0).setDepth(10);
-            container.on('pointerdown', () => { onDown(); bg.clear(); bg.fillStyle(0xffffff, 0.35); bg.fillRoundedRect(-S, -S, S * 2, S * 2, 20); });
-            container.on('pointerup',   () => { onUp();   bg.clear(); bg.fillStyle(0xffffff, 0.15); bg.fillRoundedRect(-S, -S, S * 2, S * 2, 20); bg.lineStyle(3, 0xffffff, 0.5); bg.strokeRoundedRect(-S, -S, S * 2, S * 2, 20); });
-            container.on('pointerout',  () => { onUp();   bg.clear(); bg.fillStyle(0xffffff, 0.15); bg.fillRoundedRect(-S, -S, S * 2, S * 2, 20); bg.lineStyle(3, 0xffffff, 0.5); bg.strokeRoundedRect(-S, -S, S * 2, S * 2, 20); });
+            this.add.container(x, y, [bg, text]).setScrollFactor(0).setDepth(10);
+            bgMap[key] = bg;
+        });
+
+        const hitTest = (px, py) => zones.filter(z => Math.abs(px - z.x) <= S && Math.abs(py - z.y) <= S).map(z => z.key);
+
+        const activePointers = new Map();
+
+        const sync = () => {
+            this.mobileInput.left = false;
+            this.mobileInput.right = false;
+            this.mobileInput.up = false;
+            activePointers.forEach(keys => keys.forEach(k => { this.mobileInput[k] = true; }));
+            zones.forEach(({ key }) => {
+                const bg = bgMap[key];
+                bg.clear();
+                if (this.mobileInput[key]) {
+                    bg.fillStyle(0xffffff, 0.35);
+                    bg.fillRoundedRect(-S, -S, S * 2, S * 2, 20);
+                } else {
+                    bg.fillStyle(0xffffff, 0.15);
+                    bg.fillRoundedRect(-S, -S, S * 2, S * 2, 20);
+                    bg.lineStyle(3, 0xffffff, 0.5);
+                    bg.strokeRoundedRect(-S, -S, S * 2, S * 2, 20);
+                }
+            });
         };
-        btn(80,  640, '←', () => this.mobileInput.left  = true, () => this.mobileInput.left  = false);
-        btn(210, 640, '→', () => this.mobileInput.right = true, () => this.mobileInput.right = false);
-        btn(1190, 640, '↑', () => this.mobileInput.up   = true, () => this.mobileInput.up    = false);
+
+        this.input.on('pointerdown', pointer => {
+            const keys = hitTest(pointer.x, pointer.y);
+            if (keys.length) { activePointers.set(pointer.id, keys); sync(); }
+        });
+
+        this.input.on('pointermove', pointer => {
+            if (!pointer.isDown) return;
+            const keys = hitTest(pointer.x, pointer.y);
+            if (keys.length) activePointers.set(pointer.id, keys);
+            else activePointers.delete(pointer.id);
+            sync();
+        });
+
+        this.input.on('pointerup', pointer => { activePointers.delete(pointer.id); sync(); });
+        this.input.on('pointerupoutside', pointer => { activePointers.delete(pointer.id); sync(); });
     }
 
     update(_, delta) {

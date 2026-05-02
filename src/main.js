@@ -10,6 +10,7 @@ const config = {
     height: 720,
     transparent: true,
     pixelArt: false,
+    input: { activePointers: 3 },
     physics: {
         default: 'arcade',
         arcade: { gravity: { y: 600 }, debug: false }
