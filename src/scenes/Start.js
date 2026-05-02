@@ -389,21 +389,21 @@ export class Start extends Phaser.Scene {
     }
 
     _createMobileButtons() {
-        const S = 55;
+        const S = 75;
         const zones = [
-            { x: 80, y: 640, key: 'left', label: '←' },
-            { x: 210, y: 640, key: 'right', label: '→' },
-            { x: 1190, y: 640, key: 'up', label: '↑' },
+            { x: 100,  y: 625, key: 'left',  label: '←' },
+            { x: 265,  y: 625, key: 'right', label: '→' },
+            { x: 1170, y: 625, key: 'up',    label: '↑' },
         ];
         const bgMap = {};
 
         zones.forEach(({ x, y, label, key }) => {
             const bg = this.add.graphics();
             bg.fillStyle(0xffffff, 0.15);
-            bg.fillRoundedRect(-S, -S, S * 2, S * 2, 20);
+            bg.fillRoundedRect(-S, -S, S * 2, S * 2, 24);
             bg.lineStyle(3, 0xffffff, 0.5);
-            bg.strokeRoundedRect(-S, -S, S * 2, S * 2, 20);
-            const text = this.add.text(0, 0, label, { fontSize: '44px', color: '#ffffff', fontFamily: 'Arial' }).setOrigin(0.5);
+            bg.strokeRoundedRect(-S, -S, S * 2, S * 2, 24);
+            const text = this.add.text(0, 0, label, { fontSize: '58px', color: '#ffffff', fontFamily: 'Arial' }).setOrigin(0.5);
             this.add.container(x, y, [bg, text]).setScrollFactor(0).setDepth(10);
             bgMap[key] = bg;
         });
