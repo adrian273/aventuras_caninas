@@ -3,11 +3,18 @@ import { Enemy } from '../entities/Enemy.js';
 import { generateLevel, WORLD_END } from '../utils/LevelGenerator.js';
 
 const BACKGROUNDS = [
-    'assets/backgrounds/1.png',
+    'assets/backgrounds/12.png',
     'assets/backgrounds/2.png',
     'assets/backgrounds/3.png',
     'assets/backgrounds/4.png',
     'assets/backgrounds/5.png',
+    'assets/backgrounds/6.png',
+    'assets/backgrounds/7.png',
+    'assets/backgrounds/8.png',
+    'assets/backgrounds/9.png',
+    'assets/backgrounds/10.png',
+    'assets/backgrounds/11.png',
+    'assets/backgrounds/12.png'
 ];
 
 export class Start extends Phaser.Scene {
@@ -20,6 +27,7 @@ export class Start extends Phaser.Scene {
         this.levelIndex = data.level ?? 0;
         this.carryScore = data.score ?? 0;
         this.carryTime = data.time ?? 0;
+        this.playerName = data.name ?? JSON.parse(localStorage.getItem('gameSave') || '{}').name ?? 'Jugador';
         this._levelDone = false;
     }
 
@@ -252,37 +260,56 @@ export class Start extends Phaser.Scene {
         this._saveScores();
         this.sound.play('power_up', { volume: 0.8 });
 
+        const isLast = this.levelIndex >= BACKGROUNDS.length - 1;
+
         this._showOverlay((cx, cy) => {
             this.add.rectangle(cx + 640, cy + 360, 1280, 720, 0x000000, 0.55).setDepth(20);
 
-            this.add.text(cx + 640, cy + 230, `¡Nivel ${this.levelIndex + 1} completado!`, {
-                fontSize: '58px', color: '#ffd700', fontFamily: 'Arial', stroke: '#000000', strokeThickness: 8
+            const title = isLast
+                ? `¡Completaste todos los niveles, ${this.playerName}!`
+                : `¡Nivel ${this.levelIndex + 1} completado!`;
+
+            this.add.text(cx + 640, cy + 230, title, {
+                fontSize: isLast ? '46px' : '58px', color: '#ffd700', fontFamily: 'Arial', stroke: '#000000', strokeThickness: 8
             }).setOrigin(0.5).setDepth(21);
 
             this.add.text(cx + 640, cy + 320, `Monedas: ${this.hud.score}   Tiempo: ${this.hud.formatTime(this.hud.elapsed)}`, {
                 fontSize: '28px', color: '#ffffff', fontFamily: 'Arial', stroke: '#000000', strokeThickness: 4
             }).setOrigin(0.5).setDepth(21);
 
-            const next = this.add.text(cx + 640, cy + 420, '  Siguiente nivel  ▶  ', {
-                fontSize: '40px', color: '#ffffff', fontFamily: 'Arial',
-                stroke: '#3b1278', strokeThickness: 6,
-                backgroundColor: '#3b1278', padding: { x: 30, y: 12 }
-            }).setOrigin(0.5).setDepth(21).setInteractive({ useHandCursor: true });
+            if (isLast) {
+                this._writeSave(0);
+                const menu = this.add.text(cx + 640, cy + 430, '  Menú principal  ', {
+                    fontSize: '40px', color: '#ffffff', fontFamily: 'Arial',
+                    stroke: '#3b1278', strokeThickness: 6,
+                    backgroundColor: '#3b1278', padding: { x: 30, y: 12 }
+                }).setOrigin(0.5).setDepth(21).setInteractive({ useHandCursor: true });
+                menu.on('pointerover', () => menu.setStyle({ color: '#ffd700' }));
+                menu.on('pointerout', () => menu.setStyle({ color: '#ffffff' }));
+                menu.on('pointerdown', () => { this.bgMusic.stop(); this.scene.start('Menu'); });
+            } else {
+                const next = this.add.text(cx + 640, cy + 420, '  Siguiente nivel  ▶  ', {
+                    fontSize: '40px', color: '#ffffff', fontFamily: 'Arial',
+                    stroke: '#3b1278', strokeThickness: 6,
+                    backgroundColor: '#3b1278', padding: { x: 30, y: 12 }
+                }).setOrigin(0.5).setDepth(21).setInteractive({ useHandCursor: true });
 
-            const menu = this.add.text(cx + 640, cy + 510, 'Menú principal', {
-                fontSize: '26px', color: '#aaddff', fontFamily: 'Arial', stroke: '#000000', strokeThickness: 3
-            }).setOrigin(0.5).setDepth(21).setInteractive({ useHandCursor: true });
+                const menu = this.add.text(cx + 640, cy + 510, 'Menú principal', {
+                    fontSize: '26px', color: '#aaddff', fontFamily: 'Arial', stroke: '#000000', strokeThickness: 3
+                }).setOrigin(0.5).setDepth(21).setInteractive({ useHandCursor: true });
 
-            next.on('pointerover', () => next.setStyle({ color: '#ffd700' }));
-            next.on('pointerout', () => next.setStyle({ color: '#ffffff' }));
-            next.on('pointerdown', () => {
-                this.bgMusic.stop();
-                this.scene.start('Start', { level: this.levelIndex + 1, score: this.hud.score, time: this.hud.elapsed });
-            });
+                next.on('pointerover', () => next.setStyle({ color: '#ffd700' }));
+                next.on('pointerout', () => next.setStyle({ color: '#ffffff' }));
+                next.on('pointerdown', () => {
+                    this._writeSave(this.levelIndex + 1);
+                    this.bgMusic.stop();
+                    this.scene.start('Start', { level: this.levelIndex + 1, score: this.hud.score, time: this.hud.elapsed, name: this.playerName });
+                });
 
-            menu.on('pointerover', () => menu.setStyle({ color: '#ffffff' }));
-            menu.on('pointerout', () => menu.setStyle({ color: '#aaddff' }));
-            menu.on('pointerdown', () => { this.bgMusic.stop(); this.scene.start('Menu'); });
+                menu.on('pointerover', () => menu.setStyle({ color: '#ffffff' }));
+                menu.on('pointerout', () => menu.setStyle({ color: '#aaddff' }));
+                menu.on('pointerdown', () => { this.bgMusic.stop(); this.scene.start('Menu'); });
+            }
         });
     }
 
@@ -304,32 +331,40 @@ export class Start extends Phaser.Scene {
     _gameOver() {
         this.physics.pause();
         this._saveScores();
+        this._writeSave(this.levelIndex);
         this.sound.play('explosion', { volume: 0.7 });
 
         this._showOverlay((cx, cy) => {
             this.add.rectangle(cx + 640, cy + 360, 1280, 720, 0x000000, 0.6).setDepth(20);
 
-            this.add.text(cx + 640, cy + 250, 'FIN DEL JUEGO', {
+            this.add.text(cx + 640, cy + 230, 'FIN DEL JUEGO', {
                 fontSize: '72px', color: '#ff2244', fontFamily: 'Arial', stroke: '#000000', strokeThickness: 8
             }).setOrigin(0.5).setDepth(21);
 
-            this.add.text(cx + 640, cy + 345, `Monedas: ${this.hud.score}   Tiempo: ${this.hud.formatTime(this.hud.elapsed)}`, {
-                fontSize: '28px', color: '#ffffff', fontFamily: 'Arial', stroke: '#000000', strokeThickness: 4
+            this.add.text(cx + 640, cy + 320, `${this.playerName} · Nivel ${this.levelIndex + 1}`, {
+                fontSize: '30px', color: '#ffd700', fontFamily: 'Arial', stroke: '#000000', strokeThickness: 4
             }).setOrigin(0.5).setDepth(21);
 
-            const restart = this.add.text(cx + 640, cy + 430, '  ▶  Jugar de nuevo  ', {
+            this.add.text(cx + 640, cy + 370, `Monedas: ${this.hud.score}   Tiempo: ${this.hud.formatTime(this.hud.elapsed)}`, {
+                fontSize: '26px', color: '#ffffff', fontFamily: 'Arial', stroke: '#000000', strokeThickness: 4
+            }).setOrigin(0.5).setDepth(21);
+
+            const cont = this.add.text(cx + 640, cy + 450, `  ▶  Continuar — Nivel ${this.levelIndex + 1}  `, {
                 fontSize: '38px', color: '#ffffff', fontFamily: 'Arial',
                 stroke: '#3b1278', strokeThickness: 6,
                 backgroundColor: '#3b1278', padding: { x: 30, y: 12 }
             }).setOrigin(0.5).setDepth(21).setInteractive({ useHandCursor: true });
 
-            const menu = this.add.text(cx + 640, cy + 515, 'Menú principal', {
+            const menu = this.add.text(cx + 640, cy + 535, 'Menú principal', {
                 fontSize: '26px', color: '#aaddff', fontFamily: 'Arial', stroke: '#000000', strokeThickness: 3
             }).setOrigin(0.5).setDepth(21).setInteractive({ useHandCursor: true });
 
-            restart.on('pointerover', () => restart.setStyle({ color: '#ffd700' }));
-            restart.on('pointerout', () => restart.setStyle({ color: '#ffffff' }));
-            restart.on('pointerdown', () => { this.bgMusic.stop(); this.scene.start('Start', { level: 0 }); });
+            cont.on('pointerover', () => cont.setStyle({ color: '#ffd700' }));
+            cont.on('pointerout', () => cont.setStyle({ color: '#ffffff' }));
+            cont.on('pointerdown', () => {
+                this.bgMusic.stop();
+                this.scene.start('Start', { level: this.levelIndex, score: this.hud.score, time: this.hud.elapsed, name: this.playerName });
+            });
 
             menu.on('pointerover', () => menu.setStyle({ color: '#ffffff' }));
             menu.on('pointerout', () => menu.setStyle({ color: '#aaddff' }));
@@ -344,12 +379,21 @@ export class Start extends Phaser.Scene {
         if (this.hud.elapsed > prevTime) localStorage.setItem('bestTime', Math.floor(this.hud.elapsed));
     }
 
+    _writeSave(level) {
+        localStorage.setItem('gameSave', JSON.stringify({
+            name: this.playerName,
+            level,
+            score: this.hud.score,
+            time: this.hud.elapsed,
+        }));
+    }
+
     _createMobileButtons() {
         const S = 55;
         const zones = [
-            { x: 80,   y: 640, key: 'left',  label: '←' },
-            { x: 210,  y: 640, key: 'right', label: '→' },
-            { x: 1190, y: 640, key: 'up',    label: '↑' },
+            { x: 80, y: 640, key: 'left', label: '←' },
+            { x: 210, y: 640, key: 'right', label: '→' },
+            { x: 1190, y: 640, key: 'up', label: '↑' },
         ];
         const bgMap = {};
 

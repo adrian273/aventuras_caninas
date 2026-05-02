@@ -1,5 +1,6 @@
-import { Menu }  from './scenes/Menu.js';
-import { Start } from './scenes/Start.js';
+import { Menu }      from './scenes/Menu.js';
+import { NameEntry } from './scenes/NameEntry.js';
+import { Start }     from './scenes/Start.js';
 
 const config = {
     type: Phaser.AUTO,
@@ -11,12 +12,14 @@ const config = {
     transparent: true,
     pixelArt: false,
     input: { activePointers: 3 },
+    dom: { createContainer: true },
     physics: {
         default: 'arcade',
         arcade: { gravity: { y: 600 }, debug: false }
     },
     scene: [
         Menu,
+        NameEntry,
         Start
     ],
     scale: {
@@ -26,4 +29,3 @@ const config = {
 }
 
 new Phaser.Game(config);
-            
