@@ -1,0 +1,102 @@
+{
+  "version": 2,
+  "columns": 4,
+  "negativeSpacingEnabled": false,
+  "backgroundColor": "transparent",
+  "manualCellSizeEnabled": false,
+  "manualCellWidth": 64,
+  "manualCellHeight": 64,
+  "hueShift": 0,
+  "saturationShift": 0,
+  "brightnessShift": 0,
+  "contrastShift": 0,
+  "sepiaAmount": 0,
+  "invertEnabled": false,
+  "layers": [
+    {
+      "id": "9b14af07-cf04-4e5d-a455-0cb0b0f26836",
+      "name": "Base",
+      "visible": true,
+      "locked": false,
+      "sprites": [
+        {
+          "id": "991407ee-7c30-4ed6-a80e-d37835f44f45",
+          "width": 32,
+          "height": 34,
+          "x": 0,
+          "y": 0,
+          "rotation": 0,
+          "flipX": false,
+          "flipY": false,
+          "name": "sprite_1.png"
+        },
+        {
+          "id": "835f59e1-be78-4592-91e0-744f77931bba",
+          "width": 32,
+          "height": 33,
+          "x": 0,
+          "y": 0,
+          "rotation": 0,
+          "flipX": false,
+          "flipY": false,
+          "name": "sprite_2.png"
+        },
+        {
+          "id": "a801e219-e067-448e-b13c-4d0246d2b0bc",
+          "width": 32,
+          "height": 33,
+          "x": 0,
+          "y": 0,
+          "rotation": 0,
+          "flipX": false,
+          "flipY": false,
+          "name": "sprite_3.png"
+        },
+        {
+          "id": "bea76d6f-4761-4f4a-adb9-d609ead655d8",
+          "width": 32,
+          "height": 32,
+          "x": 0,
+          "y": 0,
+          "rotation": 0,
+          "flipX": false,
+          "flipY": false,
+          "name": "sprite_4.png"
+        },
+        {
+          "id": "bf1d18e4-124b-491d-a645-ae1ae6eee4e1",
+          "width": 32,
+          "height": 32,
+          "x": 0,
+          "y": 0,
+          "rotation": 0,
+          "flipX": false,
+          "flipY": false,
+          "name": "sprite_5.png"
+        },
+        {
+          "id": "934bd488-904d-419e-8113-dc996b4ae01e",
+          "width": 32,
+          "height": 31,
+          "x": 0,
+          "y": 0,
+          "rotation": 0,
+          "flipX": false,
+          "flipY": false,
+          "name": "sprite_6.png"
+        },
+        {
+          "id": "c54237b2-dcfe-4c94-a89d-9ba5dd03f151",
+          "width": 32,
+          "height": 31,
+          "x": 0,
+          "y": 0,
+          "rotation": 0,
+          "flipX": false,
+          "flipY": false,
+          "name": "sprite_7.png"
+        }
+      ]
+    }
+  ]
+}

@@ -1,19 +1,37 @@
 const PRIZES = [
-    { name: '100 pesos',      weight: 45,  color: 0xf1c40f },
-    { name: '500 pesos',      weight: 20,  color: 0xe67e22 },
-    { name: '1 Galleta',      weight: 12,  color: 0x9b59b6 },
-    { name: '1 Dorito',       weight: 9,   color: 0xe74c3c },
-    { name: '1 Helado',       weight: 7,   color: 0x3498db },
-    { name: '1 Squishie',     weight: 3,   color: 0x2ecc71 },
-    { name: '1500 pesos',     weight: 2,   color: 0xff6b9d },
-    { name: '5 Squishies',    weight: 1,   color: 0x1abc9c },
-    { name: '2000 pesos',     weight: 0.5, color: 0xf39c12 },
-    { name: '¡Lo que pidas!', weight: 0.5, color: 0xff4444 },
+    { name: 'Sigue participando XD', weight: 10, color: 0x555555 },
+    { name: '100 pesos', weight: 25, color: 0xf1c40f },
+    { name: '500 pesos', weight: 13, color: 0xe67e22 },
+    { name: 'Sigue participando XD', weight: 10, color: 0x555555 },
+    { name: '1 Galleta', weight: 8, color: 0x9b59b6 },
+    { name: '1 Dorito', weight: 6, color: 0xe74c3c },
+    { name: 'Sigue participando XD', weight: 10, color: 0x555555 },
+    { name: '1 Helado', weight: 4, color: 0x3498db },
+    { name: '1 Squishie', weight: 2, color: 0x2ecc71 },
+    { name: '1500 pesos', weight: 1, color: 0xff6b9d },
+    { name: '5 Squishies', weight: 0.5, color: 0x1abc9c },
+    { name: '2000 pesos', weight: 0.3, color: 0xf39c12 },
+    { name: '¡Lo que pidas!', weight: 0.2, color: 0xff4444 },
 ];
 
-const R   = 210;
-const N   = PRIZES.length;
-const SEG = (Math.PI * 2) / N;
+const ONE_TIME = new Set(['1 Galleta', '1 Dorito', '¡Lo que pidas!']);
+
+function getActivePrizes() {
+    const claimed = JSON.parse(localStorage.getItem('claimedPrizes') || '[]');
+    return PRIZES.filter(p => !ONE_TIME.has(p.name) || !claimed.includes(p.name));
+}
+
+function claimPrize(name) {
+    if (!ONE_TIME.has(name)) return;
+    const claimed = JSON.parse(localStorage.getItem('claimedPrizes') || '[]');
+    if (!claimed.includes(name)) {
+        claimed.push(name);
+        localStorage.setItem('claimedPrizes', JSON.stringify(claimed));
+    }
+}
+
+let ACTIVE;
+const R = 210;
 
 export class Prize extends Phaser.Scene {
     constructor() { super('Prize'); }
@@ -35,8 +53,10 @@ export class Prize extends Phaser.Scene {
             stroke: '#000000', strokeThickness: 4
         }).setOrigin(0.5);
 
-        this._winner  = this._pick();
-        this._spun    = false;
+        ACTIVE = getActivePrizes();
+
+        this._winner = this._pick();
+        this._spun = false;
         this._tickSnd = this.sound.add('tap', { volume: 0.3 });
 
         this._buildWheel();
@@ -45,28 +65,30 @@ export class Prize extends Phaser.Scene {
     }
 
     _pick() {
-        const total = PRIZES.reduce((s, p) => s + p.weight, 0);
+        const total = ACTIVE.reduce((s, p) => s + p.weight, 0);
         let r = Math.random() * total;
-        for (const p of PRIZES) { r -= p.weight; if (r <= 0) return p; }
-        return PRIZES[0];
+        for (const p of ACTIVE) { r -= p.weight; if (r <= 0) return p; }
+        return ACTIVE[0];
     }
 
     _buildWheel() {
         const cx = 640, cy = 390;
+        const n = ACTIVE.length;
+        const seg = (Math.PI * 2) / n;
         this.wheelContainer = this.add.container(cx, cy);
 
         const g = this.add.graphics();
-        PRIZES.forEach((prize, i) => {
-            const start = i * SEG - Math.PI / 2;
-            const end   = start + SEG;
+        ACTIVE.forEach((prize, i) => {
+            const start = i * seg - Math.PI / 2;
+            const end = start + seg;
             g.fillStyle(prize.color);
             g.slice(0, 0, R, start, end, false);
             g.fillPath();
         });
 
         g.lineStyle(2, 0x000000, 0.4);
-        for (let i = 0; i < N; i++) {
-            const a = i * SEG - Math.PI / 2;
+        for (let i = 0; i < n; i++) {
+            const a = i * seg - Math.PI / 2;
             g.lineBetween(0, 0, Math.cos(a) * R, Math.sin(a) * R);
         }
         g.fillStyle(0xffffff);
@@ -74,17 +96,19 @@ export class Prize extends Phaser.Scene {
 
         this.wheelContainer.add(g);
 
-        PRIZES.forEach((prize, i) => {
-            const mid = i * SEG - Math.PI / 2 + SEG / 2;
-            const tx  = Math.cos(mid) * R * 0.64;
-            const ty  = Math.sin(mid) * R * 0.64;
-            const t   = this.add.text(tx, ty, prize.name, {
+        ACTIVE.forEach((prize, i) => {
+            const mid = i * seg - Math.PI / 2 + seg / 2;
+            const tx = Math.cos(mid) * R * 0.64;
+            const ty = Math.sin(mid) * R * 0.64;
+            const t = this.add.text(tx, ty, prize.name, {
                 fontSize: '13px', color: '#ffffff', fontFamily: 'Arial',
                 stroke: '#000000', strokeThickness: 3,
                 align: 'center', wordWrap: { width: 80 }
             }).setOrigin(0.5).setRotation(mid + Math.PI / 2);
             this.wheelContainer.add(t);
         });
+
+        this._wheelSeg = seg;
     }
 
     _buildPointer() {
@@ -105,7 +129,7 @@ export class Prize extends Phaser.Scene {
         }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
         this._btn.on('pointerover', () => this._btn.setStyle({ color: '#ffd700' }));
-        this._btn.on('pointerout',  () => this._btn.setStyle({ color: '#ffffff' }));
+        this._btn.on('pointerout', () => this._btn.setStyle({ color: '#ffffff' }));
         this._btn.on('pointerdown', () => {
             if (this._spun) return;
             this._spun = true;
@@ -115,18 +139,18 @@ export class Prize extends Phaser.Scene {
     }
 
     _spin() {
-        const winIdx     = PRIZES.indexOf(this._winner);
-        const segDeg     = 360 / N;
-        const targetOff  = -(winIdx * segDeg + segDeg / 2);
-        const fullSpins  = (6 + Math.floor(Math.random() * 4)) * 360;
+        const winIdx = ACTIVE.indexOf(this._winner);
+        const segDeg = Phaser.Math.RadToDeg(this._wheelSeg);
+        const targetOff = -(winIdx * segDeg + segDeg / 2);
+        const fullSpins = (6 + Math.floor(Math.random() * 4)) * 360;
         const finalAngle = fullSpins + targetOff;
 
         let lastSegment = -1;
         this.tweens.add({
-            targets:  this.wheelContainer,
-            angle:    finalAngle,
+            targets: this.wheelContainer,
+            angle: finalAngle,
             duration: 5000,
-            ease:     'Cubic.easeOut',
+            ease: 'Cubic.easeOut',
             onUpdate: () => {
                 const current = ((this.wheelContainer.angle % 360) + 360) % 360;
                 const seg = Math.floor(current / segDeg);
@@ -140,6 +164,7 @@ export class Prize extends Phaser.Scene {
     }
 
     _showPrize() {
+        claimPrize(this._winner.name);
         const uuid = crypto.randomUUID();
 
         this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.75).setDepth(5);
@@ -176,11 +201,11 @@ export class Prize extends Phaser.Scene {
         }).setOrigin(0.5).setDepth(6).setInteractive({ useHandCursor: true });
 
         replay.on('pointerover', () => replay.setStyle({ color: '#ffd700' }));
-        replay.on('pointerout',  () => replay.setStyle({ color: '#ffffff' }));
+        replay.on('pointerout', () => replay.setStyle({ color: '#ffffff' }));
         replay.on('pointerdown', () => this.scene.start('Start', { level: 0 }));
 
         menu.on('pointerover', () => menu.setStyle({ color: '#ffffff' }));
-        menu.on('pointerout',  () => menu.setStyle({ color: '#aaddff' }));
+        menu.on('pointerout', () => menu.setStyle({ color: '#aaddff' }));
         menu.on('pointerdown', () => this.scene.start('Menu'));
     }
 }

@@ -1,22 +1,23 @@
 import { HUD } from '../ui/HUD.js';
 import { Enemy } from '../entities/Enemy.js';
+import { Mushroom } from '../entities/Mushroom.js';
 import { generateLevel, WORLD_END } from '../utils/LevelGenerator.js';
 
 export const BACKGROUNDS = [
     'assets/backgrounds/1.png',
-    // 'assets/backgrounds/2.png',
-    // 'assets/backgrounds/3.png',
-    // 'assets/backgrounds/4.png',
-    // 'assets/backgrounds/5.png',
-    // 'assets/backgrounds/6.png',
-    // 'assets/backgrounds/7.png',
-    // 'assets/backgrounds/8.png',
-    // 'assets/backgrounds/9.png',
-    // 'assets/backgrounds/10.png',
-    // 'assets/backgrounds/11.png',
-    // 'assets/backgrounds/12.png',
-    // 'assets/backgrounds/13.png',
-    // 'assets/backgrounds/14.png'
+    'assets/backgrounds/2.png',
+    'assets/backgrounds/3.png',
+    'assets/backgrounds/4.png',
+    'assets/backgrounds/5.png',
+    'assets/backgrounds/6.png',
+    'assets/backgrounds/7.png',
+    'assets/backgrounds/8.png',
+    'assets/backgrounds/9.png',
+    'assets/backgrounds/10.png',
+    'assets/backgrounds/11.png',
+    'assets/backgrounds/12.png',
+    'assets/backgrounds/13.png',
+    'assets/backgrounds/14.png'
 ];
 
 export class Start extends Phaser.Scene {
@@ -34,18 +35,18 @@ export class Start extends Phaser.Scene {
     }
 
     preload() {
-        const bg   = this.add.rectangle(640, 360, 1280, 720, 0x1a0533).setDepth(50).setScrollFactor(0);
+        const bg = this.add.rectangle(640, 360, 1280, 720, 0x1a0533).setDepth(50).setScrollFactor(0);
         const name = this.add.text(640, 260, this.playerName ?? '', {
             fontSize: '26px', color: '#aaddff', fontFamily: 'Arial', stroke: '#000000', strokeThickness: 3
         }).setOrigin(0.5).setDepth(50).setScrollFactor(0);
-        const lvl  = this.add.text(640, 310, `Nivel ${this.levelIndex + 1}`, {
+        const lvl = this.add.text(640, 310, `Nivel ${this.levelIndex + 1}`, {
             fontSize: '52px', color: '#ffd700', fontFamily: 'Arial', stroke: '#000000', strokeThickness: 8
         }).setOrigin(0.5).setDepth(50).setScrollFactor(0);
-        const lbl  = this.add.text(640, 390, 'Cargando...', {
+        const lbl = this.add.text(640, 390, 'Cargando...', {
             fontSize: '28px', color: '#ffffff', fontFamily: 'Arial', stroke: '#000000', strokeThickness: 4
         }).setOrigin(0.5).setDepth(50).setScrollFactor(0);
         const track = this.add.rectangle(640, 440, 420, 18, 0x333344).setDepth(50).setScrollFactor(0);
-        const bar   = this.add.rectangle(432, 440, 0, 18, 0x7b3fa0).setOrigin(0, 0.5).setDepth(50).setScrollFactor(0);
+        const bar = this.add.rectangle(432, 440, 0, 18, 0x7b3fa0).setOrigin(0, 0.5).setDepth(50).setScrollFactor(0);
 
         this._loadingObjs = [bg, name, lvl, lbl, track, bar];
 
@@ -73,6 +74,8 @@ export class Start extends Phaser.Scene {
         if (!this.cache.audio.exists('bgm')) {
             this.load.audio('bgm', 'assets/sounds/time_for_adventure.mp3');
         }
+
+        Mushroom.preload(this);
 
         for (let i = 1; i <= 8; i++) {
             const key = `coin_frame_${String(i).padStart(3, '0')}`;
@@ -174,10 +177,22 @@ export class Start extends Phaser.Scene {
         this.enemies = this.physics.add.group({ classType: Enemy, runChildUpdate: true });
         enemies.forEach(({ x, y, range, type }) => this.enemies.add(new Enemy(this, x, y, { type, range })));
 
+        Mushroom.createAnims(this);
+        this.mushrooms = this.physics.add.group();
+        const mushCount = 3 + this.levelIndex;
+        for (let i = 0; i < mushCount; i++) {
+            const mx = Phaser.Math.Between(-4200, 4400);
+            const m = new Mushroom(this, mx, 400);
+            this.mushrooms.add(m);
+            m.play('mush_idle');
+        }
+
         this.physics.add.collider(this.player, ground);
         this.physics.add.collider(this.player, this.platforms);
         this.physics.add.collider(this.enemies, ground);
         this.physics.add.collider(this.enemies, this.platforms);
+        this.physics.add.collider(this.mushrooms, ground);
+        this.physics.add.collider(this.mushrooms, this.platforms);
 
         this.physics.add.overlap(this.player, this.coins, (_p, coin) => {
             coin.destroy();
@@ -188,6 +203,16 @@ export class Start extends Phaser.Scene {
         this._buildFlagpole();
 
         this.physics.add.overlap(this.player, this.enemies, this._hitEnemy, null, this);
+        this.physics.add.overlap(this.player, this.mushrooms, (player, mush) => {
+            const stomped = player.body.velocity.y > 0 &&
+                player.body.bottom <= mush.body.top + 16;
+            if (stomped) {
+                mush.destroy();
+                player.setVelocityY(-350);
+            } else {
+                this._hitEnemy();
+            }
+        }, null, this);
 
         this.hud = new HUD(this, this.levelIndex);
         this.hud.score = this.carryScore;
@@ -474,6 +499,7 @@ export class Start extends Phaser.Scene {
     update(_, delta) {
         this.background.tilePositionX = this.cameras.main.scrollX * 0.3;
         this.hud.update(delta);
+        this.mushrooms?.getChildren().forEach(m => m.update(this.player.x));
 
         const { left, right, up } = this.cursors;
         const isShift = this.shiftKey.isDown;
