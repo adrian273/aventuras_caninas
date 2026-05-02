@@ -7,7 +7,7 @@ const BACKGROUNDS = [
     'assets/backgrounds/2.png',
     'assets/backgrounds/3.png',
     'assets/backgrounds/4.png',
-
+    'assets/backgrounds/5.png',
 ];
 
 export class Start extends Phaser.Scene {
@@ -345,21 +345,22 @@ export class Start extends Phaser.Scene {
     }
 
     _createMobileButtons() {
+        const S = 55;
         const btn = (x, y, label, onDown, onUp) => {
             const bg = this.add.graphics();
             bg.fillStyle(0xffffff, 0.15);
-            bg.fillRoundedRect(-40, -40, 80, 80, 16);
-            bg.lineStyle(2, 0xffffff, 0.4);
-            bg.strokeRoundedRect(-40, -40, 80, 80, 16);
-            const text = this.add.text(0, 0, label, { fontSize: '28px', color: '#ffffff', fontFamily: 'Arial' }).setOrigin(0.5);
-            const container = this.add.container(x, y, [bg, text]).setSize(80, 80).setInteractive().setScrollFactor(0).setDepth(10);
-            container.on('pointerdown', () => { onDown(); bg.clear(); bg.fillStyle(0xffffff, 0.35); bg.fillRoundedRect(-40, -40, 80, 80, 16); });
-            container.on('pointerup', () => { onUp(); bg.clear(); bg.fillStyle(0xffffff, 0.15); bg.fillRoundedRect(-40, -40, 80, 80, 16); bg.lineStyle(2, 0xffffff, 0.4); bg.strokeRoundedRect(-40, -40, 80, 80, 16); });
-            container.on('pointerout', () => { onUp(); bg.clear(); bg.fillStyle(0xffffff, 0.15); bg.fillRoundedRect(-40, -40, 80, 80, 16); bg.lineStyle(2, 0xffffff, 0.4); bg.strokeRoundedRect(-40, -40, 80, 80, 16); });
+            bg.fillRoundedRect(-S, -S, S * 2, S * 2, 20);
+            bg.lineStyle(3, 0xffffff, 0.5);
+            bg.strokeRoundedRect(-S, -S, S * 2, S * 2, 20);
+            const text = this.add.text(0, 0, label, { fontSize: '44px', color: '#ffffff', fontFamily: 'Arial' }).setOrigin(0.5);
+            const container = this.add.container(x, y, [bg, text]).setSize(S * 2, S * 2).setInteractive().setScrollFactor(0).setDepth(10);
+            container.on('pointerdown', () => { onDown(); bg.clear(); bg.fillStyle(0xffffff, 0.35); bg.fillRoundedRect(-S, -S, S * 2, S * 2, 20); });
+            container.on('pointerup',   () => { onUp();   bg.clear(); bg.fillStyle(0xffffff, 0.15); bg.fillRoundedRect(-S, -S, S * 2, S * 2, 20); bg.lineStyle(3, 0xffffff, 0.5); bg.strokeRoundedRect(-S, -S, S * 2, S * 2, 20); });
+            container.on('pointerout',  () => { onUp();   bg.clear(); bg.fillStyle(0xffffff, 0.15); bg.fillRoundedRect(-S, -S, S * 2, S * 2, 20); bg.lineStyle(3, 0xffffff, 0.5); bg.strokeRoundedRect(-S, -S, S * 2, S * 2, 20); });
         };
-        btn(80, 660, '←', () => this.mobileInput.left = true, () => this.mobileInput.left = false);
-        btn(180, 660, '→', () => this.mobileInput.right = true, () => this.mobileInput.right = false);
-        btn(1200, 660, '↑', () => this.mobileInput.up = true, () => this.mobileInput.up = false);
+        btn(80,  640, '←', () => this.mobileInput.left  = true, () => this.mobileInput.left  = false);
+        btn(210, 640, '→', () => this.mobileInput.right = true, () => this.mobileInput.right = false);
+        btn(1190, 640, '↑', () => this.mobileInput.up   = true, () => this.mobileInput.up    = false);
     }
 
     update(_, delta) {
