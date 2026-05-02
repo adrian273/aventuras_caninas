@@ -2,21 +2,21 @@ import { HUD } from '../ui/HUD.js';
 import { Enemy } from '../entities/Enemy.js';
 import { generateLevel, WORLD_END } from '../utils/LevelGenerator.js';
 
-const BACKGROUNDS = [
-    'assets/backgrounds/12.png',
-    'assets/backgrounds/2.png',
-    'assets/backgrounds/3.png',
-    'assets/backgrounds/4.png',
-    'assets/backgrounds/5.png',
-    'assets/backgrounds/6.png',
-    'assets/backgrounds/7.png',
-    'assets/backgrounds/8.png',
-    'assets/backgrounds/9.png',
-    'assets/backgrounds/10.png',
-    'assets/backgrounds/11.png',
-    'assets/backgrounds/12.png',
-    'assets/backgrounds/13.png',
-    'assets/backgrounds/14.png'
+export const BACKGROUNDS = [
+    'assets/backgrounds/1.png',
+    // 'assets/backgrounds/2.png',
+    // 'assets/backgrounds/3.png',
+    // 'assets/backgrounds/4.png',
+    // 'assets/backgrounds/5.png',
+    // 'assets/backgrounds/6.png',
+    // 'assets/backgrounds/7.png',
+    // 'assets/backgrounds/8.png',
+    // 'assets/backgrounds/9.png',
+    // 'assets/backgrounds/10.png',
+    // 'assets/backgrounds/11.png',
+    // 'assets/backgrounds/12.png',
+    // 'assets/backgrounds/13.png',
+    // 'assets/backgrounds/14.png'
 ];
 
 export class Start extends Phaser.Scene {
@@ -34,6 +34,23 @@ export class Start extends Phaser.Scene {
     }
 
     preload() {
+        const bg   = this.add.rectangle(640, 360, 1280, 720, 0x1a0533).setDepth(50).setScrollFactor(0);
+        const name = this.add.text(640, 260, this.playerName ?? '', {
+            fontSize: '26px', color: '#aaddff', fontFamily: 'Arial', stroke: '#000000', strokeThickness: 3
+        }).setOrigin(0.5).setDepth(50).setScrollFactor(0);
+        const lvl  = this.add.text(640, 310, `Nivel ${this.levelIndex + 1}`, {
+            fontSize: '52px', color: '#ffd700', fontFamily: 'Arial', stroke: '#000000', strokeThickness: 8
+        }).setOrigin(0.5).setDepth(50).setScrollFactor(0);
+        const lbl  = this.add.text(640, 390, 'Cargando...', {
+            fontSize: '28px', color: '#ffffff', fontFamily: 'Arial', stroke: '#000000', strokeThickness: 4
+        }).setOrigin(0.5).setDepth(50).setScrollFactor(0);
+        const track = this.add.rectangle(640, 440, 420, 18, 0x333344).setDepth(50).setScrollFactor(0);
+        const bar   = this.add.rectangle(432, 440, 0, 18, 0x7b3fa0).setOrigin(0, 0.5).setDepth(50).setScrollFactor(0);
+
+        this._loadingObjs = [bg, name, lvl, lbl, track, bar];
+
+        this.load.on('progress', v => { bar.width = 420 * v; });
+
         const bgKey = `bg_${this.levelIndex}`;
         const bgPath = BACKGROUNDS[this.levelIndex % BACKGROUNDS.length];
         if (!this.textures.exists(bgKey)) {
@@ -109,6 +126,9 @@ export class Start extends Phaser.Scene {
     }
 
     create() {
+        this._loadingObjs?.forEach(o => o.destroy());
+        this._loadingObjs = null;
+
         const bgKey = `bg_${this.levelIndex}`;
         this.background = this.add.tileSprite(640, 360, 1280, 720, bgKey).setScrollFactor(0);
 
@@ -281,14 +301,14 @@ export class Start extends Phaser.Scene {
 
             if (isLast) {
                 this._writeSave(0);
-                const menu = this.add.text(cx + 640, cy + 430, '  Menú principal  ', {
+                const prizeBtn = this.add.text(cx + 640, cy + 430, '  🎁 ¡Girar la rueda!  ', {
                     fontSize: '40px', color: '#ffffff', fontFamily: 'Arial',
                     stroke: '#3b1278', strokeThickness: 6,
                     backgroundColor: '#3b1278', padding: { x: 30, y: 12 }
                 }).setOrigin(0.5).setDepth(21).setInteractive({ useHandCursor: true });
-                menu.on('pointerover', () => menu.setStyle({ color: '#ffd700' }));
-                menu.on('pointerout', () => menu.setStyle({ color: '#ffffff' }));
-                menu.on('pointerdown', () => { this.bgMusic.stop(); this.scene.start('Menu'); });
+                prizeBtn.on('pointerover', () => prizeBtn.setStyle({ color: '#ffd700' }));
+                prizeBtn.on('pointerout', () => prizeBtn.setStyle({ color: '#ffffff' }));
+                prizeBtn.on('pointerdown', () => { this.bgMusic.stop(); this.scene.start('Prize'); });
             } else {
                 const next = this.add.text(cx + 640, cy + 420, '  Siguiente nivel  ▶  ', {
                     fontSize: '40px', color: '#ffffff', fontFamily: 'Arial',

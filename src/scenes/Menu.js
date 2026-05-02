@@ -10,6 +10,7 @@ export class Menu extends Phaser.Scene {
     create() {
         this.add.image(640, 360, 'menu_bg').setDisplaySize(1280, 720);
 
+
         const bestCoins = localStorage.getItem('bestCoins') ?? 0;
         const bestTime  = localStorage.getItem('bestTime')  ?? 0;
         const save      = JSON.parse(localStorage.getItem('gameSave') || 'null');

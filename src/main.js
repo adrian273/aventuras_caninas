@@ -1,6 +1,9 @@
-import { Menu }      from './scenes/Menu.js';
-import { NameEntry } from './scenes/NameEntry.js';
-import { Start }     from './scenes/Start.js';
+import { Menu }        from './scenes/Menu.js';
+import { NameEntry }   from './scenes/NameEntry.js';
+import { Start, BACKGROUNDS } from './scenes/Start.js';
+import { Prize }       from './scenes/Prize.js';
+
+export const LAST_LEVEL = BACKGROUNDS.length - 1;
 
 const config = {
     type: Phaser.AUTO,
@@ -20,7 +23,8 @@ const config = {
     scene: [
         Menu,
         NameEntry,
-        Start
+        Start,
+        Prize
     ],
     scale: {
         mode: Phaser.Scale.FIT,

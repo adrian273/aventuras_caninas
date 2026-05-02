@@ -29,6 +29,7 @@ export class HUD {
             fontSize: '24px', color: '#ffffff', fontFamily: 'Arial',
             stroke: '#000000', strokeThickness: 4
         }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(10);
+
     }
 
     _createHeartTexture() {

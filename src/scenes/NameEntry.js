@@ -73,6 +73,7 @@ export class NameEntry extends Phaser.Scene {
         const raw  = document.getElementById('nameInput')?.value ?? '';
         const name = raw.trim() || 'Jugador';
         localStorage.setItem('gameSave', JSON.stringify({ name, level: 0, score: 0, time: 0 }));
+        this.scale.startFullscreen();
         this.scene.start('Start', { level: 0, score: 0, time: 0, name });
     }
 }
