@@ -14,7 +14,9 @@ const BACKGROUNDS = [
     'assets/backgrounds/9.png',
     'assets/backgrounds/10.png',
     'assets/backgrounds/11.png',
-    'assets/backgrounds/12.png'
+    'assets/backgrounds/12.png',
+    'assets/backgrounds/13.png',
+    'assets/backgrounds/14.png'
 ];
 
 export class Start extends Phaser.Scene {
@@ -391,9 +393,9 @@ export class Start extends Phaser.Scene {
     _createMobileButtons() {
         const S = 75;
         const zones = [
-            { x: 100,  y: 625, key: 'left',  label: '←' },
-            { x: 265,  y: 625, key: 'right', label: '→' },
-            { x: 1170, y: 625, key: 'up',    label: '↑' },
+            { x: 100, y: 625, key: 'left', label: '←' },
+            { x: 265, y: 625, key: 'right', label: '→' },
+            { x: 1170, y: 625, key: 'up', label: '↑' },
         ];
         const bgMap = {};
 
