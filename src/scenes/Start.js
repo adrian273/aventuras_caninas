@@ -1,5 +1,6 @@
 import { HUD } from '../ui/HUD.js';
 import { Enemy } from '../entities/Enemy.js';
+import { Boss } from '../entities/Boss.js';
 import { Mushroom } from '../entities/Mushroom.js';
 import { generateLevel, WORLD_END } from '../utils/LevelGenerator.js';
 
@@ -29,7 +30,8 @@ export class Start extends Phaser.Scene {
     init(data) {
         this.levelIndex = data.level ?? 0;
         this.carryScore = data.score ?? 0;
-        this.carryTime = data.time ?? 0;
+        this.carryTime  = data.time  ?? 0;
+        this.carryHp    = data.hp    ?? 5;
         this.playerName = data.name ?? JSON.parse(localStorage.getItem('gameSave') || '{}').name ?? 'Jugador';
         this._levelDone = false;
     }
@@ -76,6 +78,7 @@ export class Start extends Phaser.Scene {
         }
 
         Mushroom.preload(this);
+        Boss.preload(this);
 
         for (let i = 1; i <= 8; i++) {
             const key = `coin_frame_${String(i).padStart(3, '0')}`;
@@ -141,16 +144,17 @@ export class Start extends Phaser.Scene {
             const src = this.textures.get(key).source[0].image;
             if (src instanceof HTMLImageElement) this.stripWhite(key);
         });
+        Boss.stripWhiteFrames(this);
 
         const worldWidth = 10000;
         this.physics.world.setBounds(-worldWidth / 2, 0, worldWidth, 720);
 
-        const ground = this.add.rectangle(0, 710, worldWidth, 40, 0x4a3728);
-        this.physics.add.existing(ground, true);
+        const ground = this._buildGround();
 
         const { platforms, coins, enemies } = generateLevel(this.levelIndex);
 
         this._buildPlatforms(platforms);
+        this._buildHazardPlatforms();
 
         this.player = this.physics.add.sprite(-4600, 580, 'frame_023');
         this.player.setCollideWorldBounds(true);
@@ -177,6 +181,12 @@ export class Start extends Phaser.Scene {
         this.enemies = this.physics.add.group({ classType: Enemy, runChildUpdate: true });
         enemies.forEach(({ x, y, range, type }) => this.enemies.add(new Enemy(this, x, y, { type, range })));
 
+        Boss.createProjectileTextures(this);
+        Boss.createAnims(this);
+        const bossType = Boss.getBossTypeForLevel(this.levelIndex);
+        this.boss = new Boss(this, WORLD_END - 650, 500, bossType, this.levelIndex);
+        this.boss.play(`boss_${bossType}_attack`);
+
         Mushroom.createAnims(this);
         this.mushrooms = this.physics.add.group();
         const mushCount = 3 + this.levelIndex;
@@ -193,6 +203,15 @@ export class Start extends Phaser.Scene {
         this.physics.add.collider(this.enemies, this.platforms);
         this.physics.add.collider(this.mushrooms, ground);
         this.physics.add.collider(this.mushrooms, this.platforms);
+        this.physics.add.collider(this.boss, ground);
+
+        this.physics.add.overlap(this.enemies, this.hazardGroup, (enemy) => {
+            if (enemy.active) enemy.destroy();
+        });
+        this.physics.add.overlap(this.mushrooms, this.hazardGroup, (mush) => {
+            if (mush.active) mush.destroy();
+        });
+        this.physics.add.overlap(this.player, this.lavaGroup, () => this._hitEnemy());
 
         this.physics.add.overlap(this.player, this.coins, (_p, coin) => {
             coin.destroy();
@@ -201,8 +220,21 @@ export class Start extends Phaser.Scene {
         });
 
         this._buildFlagpole();
+        this._buildBarrier();
 
-        this.physics.add.overlap(this.player, this.enemies, this._hitEnemy, null, this);
+        this.physics.add.overlap(this.player, this.enemies, (player, enemy) => {
+            const stomped = player.body.velocity.y > 0 && player.body.bottom <= enemy.body.top + 16;
+            if (stomped) {
+                enemy.destroy();
+                player.setVelocityY(-350);
+                this.sound.play('jump', { volume: 0.5 });
+            } else {
+                this._hitEnemy();
+            }
+        }, null, this);
+        this.physics.add.collider(this.player, this.boss, this._hitBoss, null, this);
+        this.physics.add.overlap(this.player, this.boss.stars, this._hitByStar, null, this);
+        this.physics.add.overlap(this.player, this.boss.comets, this._hitByComet, null, this);
         this.physics.add.overlap(this.player, this.mushrooms, (player, mush) => {
             const stomped = player.body.velocity.y > 0 &&
                 player.body.bottom <= mush.body.top + 16;
@@ -214,9 +246,10 @@ export class Start extends Phaser.Scene {
             }
         }, null, this);
 
-        this.hud = new HUD(this, this.levelIndex);
+        this.hud = new HUD(this, this.levelIndex, this.carryHp);
         this.hud.score = this.carryScore;
         this.hud.elapsed = this.carryTime;
+        this.hud._nextLifeAt = (Math.floor(this.carryScore / 50) + 1) * 50;
         this.hud.scoreText.setText(`Monedas: ${this.carryScore}`);
 
         this.invincible = false;
@@ -234,11 +267,180 @@ export class Start extends Phaser.Scene {
         this.bgMusic.play();
     }
 
+    _generateTerrainSegments() {
+        const level     = this.levelIndex;
+        const lastLevel = BACKGROUNDS.length - 1;
+        const lavaLevel = level % 3 === 0 || level === lastLevel;
+        const NO_LAVA   = ['grass', 'dirt', 'water'];
+        const ALL       = ['grass', 'dirt', 'water', 'lava'];
+        const BOSS_X    = WORLD_END - 650;
+
+        const segments = [];
+        let x = -5000;
+
+        const firstW = Phaser.Math.Between(900, 1500);
+        segments.push({ x1: x, x2: x + firstW, type: Phaser.Math.RND.pick(['grass', 'dirt']) });
+        x += firstW;
+
+        while (x < 5000) {
+            let w, type;
+            if (lavaLevel) {
+                w    = Phaser.Math.Between(500, 1800);
+                type = Phaser.Math.RND.pick(ALL);
+            } else if (Math.random() < 0.15) {
+                w    = Phaser.Math.Between(180, 340);
+                type = 'lava';
+            } else {
+                w    = Phaser.Math.Between(500, 1800);
+                type = Phaser.Math.RND.pick(NO_LAVA);
+            }
+            const end = Math.min(x + w, 5050);
+            segments.push({ x1: x, x2: end, type });
+            x = end;
+        }
+
+        segments.forEach(s => {
+            if (s.type === 'lava' && s.x1 <= BOSS_X && s.x2 >= BOSS_X) s.type = 'dirt';
+        });
+
+        return segments.map(s => ({ x: (s.x1 + s.x2) / 2, w: s.x2 - s.x1, type: s.type }));
+    }
+
+    _buildGround() {
+        const COLORS = {
+            grass: { base: 0x3a7d1e, top: 0x5cb82e },
+            dirt:  { base: 0x7a4a1e, top: 0x9b6235 },
+            water: { base: 0x1a5ea8, top: 0x3a8fd4 },
+            lava:  { base: 0xcc2200, top: 0xff6600 },
+        };
+        const HAZARD = new Set(['water', 'lava']);
+
+        const segments = this._generateTerrainSegments();
+        this.terrainSegments = segments;
+        const group = this.physics.add.staticGroup();
+        this.hazardGroup = this.physics.add.staticGroup();
+        this.lavaGroup   = this.physics.add.staticGroup();
+
+        if (!this.textures.exists('fx_particle')) {
+            const g = this.make.graphics({ add: false });
+            g.fillStyle(0xffffff);
+            g.fillCircle(8, 8, 8);
+            g.generateTexture('fx_particle', 16, 16);
+            g.destroy();
+        }
+
+        segments.forEach(({ x, w, type }) => {
+            const { base, top } = COLORS[type];
+            const rect = this.add.rectangle(x, 714, w, 48, base);
+            this.physics.add.existing(rect, true);
+            group.add(rect);
+            this.add.rectangle(x, 691, w, 6, top);
+
+            if (HAZARD.has(type)) {
+                const zone = this.add.rectangle(x, 700, w, 30);
+                this.physics.add.existing(zone, true);
+                this.hazardGroup.add(zone);
+            }
+            if (type === 'lava') {
+                const lzone = this.add.rectangle(x, 700, w, 30);
+                this.physics.add.existing(lzone, true);
+                this.lavaGroup.add(lzone);
+            }
+
+            this._buildTerrainEffect(type, x, w);
+        });
+
+        return group;
+    }
+
+    _buildTerrainEffect(type, cx, w) {
+        const surface = new Phaser.Geom.Rectangle(cx - w / 2, 691, w, 1);
+
+        if (type === 'lava') {
+            this.add.particles(0, 0, 'fx_particle', {
+                emitZone: { type: 'random', source: surface },
+                speedY: { min: -180, max: -80 }, speedX: { min: -18, max: 18 },
+                scale: { start: 0.55, end: 0 }, alpha: { start: 0.85, end: 0 },
+                lifespan: { min: 500, max: 950 },
+                tint: [0xff2200, 0xff5500, 0xff8800, 0xffbb00],
+                frequency: 30, quantity: 2, blendMode: 'ADD', depth: 0,
+            });
+            this.add.particles(0, 0, 'fx_particle', {
+                emitZone: { type: 'random', source: surface },
+                speedY: { min: -280, max: -140 }, speedX: { min: -10, max: 10 },
+                scale: { start: 0.3, end: 0 }, alpha: { start: 1, end: 0 },
+                lifespan: { min: 350, max: 650 },
+                tint: [0xffffff, 0xffee88, 0xffcc00],
+                frequency: 50, quantity: 1, blendMode: 'ADD', depth: 0,
+            });
+        } else if (type === 'grass') {
+            this.add.particles(0, 0, 'fx_particle', {
+                emitZone: { type: 'random', source: surface },
+                speedY: { min: -55, max: -18 }, speedX: { min: -14, max: 14 },
+                scale: { start: 0.18, end: 0 }, alpha: { start: 0.55, end: 0 },
+                lifespan: { min: 900, max: 1700 },
+                tint: [0x88ff44, 0xaaffaa, 0x55cc22, 0xccff88],
+                frequency: 95, quantity: 1, depth: 0,
+            });
+        } else if (type === 'water') {
+            this.add.particles(0, 0, 'fx_particle', {
+                emitZone: { type: 'random', source: surface },
+                speedY: { min: -75, max: -28 }, speedX: { min: -6, max: 6 },
+                scale: { start: 0.16, end: 0 }, alpha: { start: 0.75, end: 0 },
+                lifespan: { min: 700, max: 1200 },
+                tint: [0x44aaff, 0x88ddff, 0xaaeeff, 0xffffff],
+                frequency: 75, quantity: 1, blendMode: 'ADD', depth: 0,
+            });
+            this.add.particles(0, 0, 'fx_particle', {
+                emitZone: { type: 'random', source: surface },
+                speedY: { min: -30, max: -10 }, speedX: { min: -25, max: 25 },
+                scale: { start: 0.1, end: 0 }, alpha: { start: 0.5, end: 0 },
+                lifespan: { min: 300, max: 600 },
+                tint: [0xffffff, 0xcceeff],
+                frequency: 110, quantity: 1, blendMode: 'ADD', depth: 0,
+            });
+        } else if (type === 'dirt') {
+            this.add.particles(0, 0, 'fx_particle', {
+                emitZone: { type: 'random', source: surface },
+                speedY: { min: -22, max: -6 }, speedX: { min: -18, max: 18 },
+                scale: { start: 0.14, end: 0 }, alpha: { start: 0.4, end: 0 },
+                lifespan: { min: 600, max: 1100 },
+                tint: [0xc8a05a, 0xe0c080, 0xaa7040],
+                frequency: 130, quantity: 1, depth: 0,
+            });
+        }
+    }
+
+    _buildHazardPlatforms() {
+        const HAZARD_TYPES = new Set(['water', 'lava']);
+        const BOSS_CLEAR   = WORLD_END - 1000;
+        this.terrainSegments
+            .filter(s => HAZARD_TYPES.has(s.type) && s.x < BOSS_CLEAR)
+            .forEach(({ x, w }) => {
+                const left  = x - w / 2;
+                const count = w < 900 ? 2 : 3;
+                const step  = w / (count + 1);
+                for (let i = 1; i <= count; i++) {
+                    const px = left + step * i + Phaser.Math.Between(-50, 50);
+                    const pw = Phaser.Math.Between(90, 150);
+                    const py = Phaser.Math.Between(510, 580);
+                    this._addPlatform(px, py, pw);
+                }
+            });
+    }
+
+    _addPlatform(x, y, w) {
+        const key = `plat_frame_${String(Phaser.Math.Between(1, 4)).padStart(3, '0')}`;
+        const plat = this.add.tileSprite(x, y, w, 16, key);
+        this.physics.add.existing(plat, true);
+        this.platforms.add(plat);
+    }
+
     _buildPlatforms(data) {
+        const BOSS_CLEAR = WORLD_END - 1000;
         this.platforms = this.physics.add.staticGroup();
-        data.forEach(({ x, y, w }) => {
-            const variant = Phaser.Math.Between(1, 4);
-            const key = `plat_frame_${String(variant).padStart(3, '0')}`;
+        data.filter(({ x }) => x < BOSS_CLEAR).forEach(({ x, y, w }) => {
+            const key = `plat_frame_${String(Phaser.Math.Between(1, 4)).padStart(3, '0')}`;
             const plat = this.add.tileSprite(x, y, w, 16, key);
             this.physics.add.existing(plat, true);
             this.platforms.add(plat);
@@ -256,27 +458,78 @@ export class Start extends Phaser.Scene {
         });
     }
 
+    _buildBarrier() {
+        const bx     = WORLD_END - 280;
+        const top    = -50;
+        const height = 820;
+
+        const wall = this.add.rectangle(bx, top + height / 2, 24, height);
+        this.physics.add.existing(wall, true);
+        this.barrierWall = wall;
+        this.physics.add.collider(this.player, wall);
+
+        const zone = new Phaser.Geom.Rectangle(bx - 18, top, 36, height);
+
+        this.barrierEmitter = this.add.particles(0, 0, 'fx_particle', {
+            emitZone: { type: 'random', source: zone },
+            speedX: { min: -22, max: 22 },
+            speedY: { min: -10, max: 10 },
+            scale:  { start: 0.7, end: 0 },
+            alpha:  { start: 1,   end: 0 },
+            lifespan: { min: 400, max: 750 },
+            tint: [0xaa00ff, 0xdd44ff, 0xff88ff, 0x7700cc, 0xffffff],
+            frequency: 8,
+            quantity: 3,
+            blendMode: 'ADD',
+            depth: 3,
+        });
+
+        this.barrierGlow = this.add.particles(0, 0, 'fx_particle', {
+            emitZone: { type: 'random', source: zone },
+            speedX: 0, speedY: 0,
+            scale:  { start: 1.2, end: 0 },
+            alpha:  { start: 0.25, end: 0 },
+            lifespan: { min: 200, max: 450 },
+            tint: [0xcc44ff],
+            frequency: 18,
+            quantity: 2,
+            blendMode: 'ADD',
+            depth: 2,
+        });
+
+        this.tweens.add({
+            targets: [this.barrierEmitter, this.barrierGlow],
+            alpha: { from: 0.7, to: 1 },
+            duration: 500,
+            yoyo: true,
+            repeat: -1,
+        });
+    }
+
     _buildFlagpole() {
         const x = WORLD_END - 100;
-        const poleTop = 480;
+        const poleTop    = 160;
         const poleBottom = 710;
-        const poleH = poleBottom - poleTop;
+        const poleH      = poleBottom - poleTop;
 
         const g = this.add.graphics();
 
-        g.fillStyle(0x888888);
-        g.fillRect(x - 6, poleTop, 12, poleH);
+        g.fillStyle(0xaaaaaa);
+        g.fillRect(x - 8, poleTop, 16, poleH);
 
-        g.fillStyle(0xcccccc);
-        g.fillRect(x - 10, poleBottom - 20, 20, 20);
+        g.fillStyle(0xdddddd);
+        g.fillRect(x - 14, poleBottom - 28, 28, 28);
+
+        g.fillStyle(0xffdd00);
+        g.fillCircle(x, poleTop, 14);
 
         g.fillStyle(0xff3300);
-        g.fillTriangle(x + 6, poleTop, x + 6, poleTop + 60, x + 56, poleTop + 30);
+        g.fillTriangle(x + 8, poleTop + 10, x + 8, poleTop + 100, x + 88, poleTop + 55);
 
-        g.fillStyle(0xffffff, 0.15);
-        g.fillTriangle(x + 6, poleTop, x + 6, poleTop + 60, x + 56, poleTop + 30);
+        g.fillStyle(0xffffff, 0.18);
+        g.fillTriangle(x + 8, poleTop + 10, x + 8, poleTop + 100, x + 88, poleTop + 55);
 
-        const zone = this.add.zone(x, poleTop + poleH / 2, 40, poleH);
+        const zone = this.add.zone(x, poleTop + poleH / 2, 50, poleH);
         this.physics.add.existing(zone, true);
         this.physics.add.overlap(this.player, zone, () => {
             if (!this._levelDone) {
@@ -350,13 +603,111 @@ export class Start extends Phaser.Scene {
                 next.on('pointerdown', () => {
                     this._writeSave(this.levelIndex + 1);
                     this.bgMusic.stop();
-                    this.scene.start('Start', { level: this.levelIndex + 1, score: this.hud.score, time: this.hud.elapsed, name: this.playerName });
+                    this.scene.start('Start', { level: this.levelIndex + 1, score: this.hud.score, time: this.hud.elapsed, name: this.playerName, hp: this.hud.hp });
                 });
 
                 menu.on('pointerover', () => menu.setStyle({ color: '#ffffff' }));
                 menu.on('pointerout', () => menu.setStyle({ color: '#aaddff' }));
                 menu.on('pointerdown', () => { this.bgMusic.stop(); this.scene.start('Menu'); });
             }
+        });
+    }
+
+    _hitBoss(player, boss) {
+        if (boss._stompCooldown) return;
+        const stomped = player.body.blocked.down && player.body.center.y < boss.body.center.y;
+        if (stomped) {
+            boss._stompCooldown = true;
+            this.time.delayedCall(350, () => { if (boss.active) boss._stompCooldown = false; });
+            player.setVelocityY(-420);
+            this.sound.play('jump', { volume: 0.6 });
+            const dead = boss.takeHit();
+            if (dead) this._killBoss(boss);
+        } else {
+            this._hitEnemy();
+        }
+    }
+
+    _killBoss(boss) {
+        this.boss = null;
+        boss.stars.getChildren().slice().forEach(s => {
+            if (s._emitter && !s._emitter.destroyed) s._emitter.destroy();
+            if (s.active) s.destroy();
+        });
+        const bx = boss.x, by = boss.body.top + 40;
+        boss.destroy();
+        this.sound.play('explosion', { volume: 0.6 });
+        const burst = this.add.particles(bx, by, 'green_star', {
+            speed: { min: 120, max: 320 },
+            scale: { start: 0.9, end: 0 },
+            alpha: { start: 1, end: 0 },
+            lifespan: 900,
+            emitting: false,
+            depth: 5,
+        });
+        burst.explode(22, bx, by);
+        this.time.delayedCall(1100, () => burst.destroy());
+
+        if (this.barrierWall) {
+            this.barrierWall.destroy();
+            this.barrierWall = null;
+        }
+        [this.barrierEmitter, this.barrierGlow].forEach(e => {
+            if (!e) return;
+            this.tweens.killTweensOf(e);
+            e.stop();
+            this.tweens.add({
+                targets: e, alpha: 0, duration: 400,
+                onComplete: () => e.destroy(),
+            });
+        });
+        this.barrierEmitter = null;
+        this.barrierGlow = null;
+    }
+
+    _hitByStar(_player, star) {
+        const emitter = star._emitter;
+        star.destroy();
+        if (emitter && !emitter.destroyed) emitter.destroy();
+
+        const burst = this.add.particles(this.player.x, this.player.y, 'green_star', {
+            speed: { min: 90, max: 200 },
+            scale: { start: 0.6, end: 0 },
+            alpha: { start: 1, end: 0 },
+            lifespan: 500,
+            emitting: false,
+        });
+        burst.explode(10, this.player.x, this.player.y);
+        this.time.delayedCall(700, () => burst.destroy());
+
+        this._hitEnemy();
+    }
+
+    _hitByComet(_player, comet) {
+        const trail = comet._trail;
+        comet.destroy();
+        if (trail && !trail.destroyed) trail.destroy();
+
+        const burst = this.add.particles(this.player.x, this.player.y, 'comet', {
+            speed: { min: 120, max: 280 },
+            scale: { start: 0.8, end: 0 },
+            alpha: { start: 1, end: 0 },
+            lifespan: 600,
+            emitting: false,
+            blendMode: 'ADD',
+        });
+        burst.explode(14, this.player.x, this.player.y);
+        this.time.delayedCall(800, () => burst.destroy());
+
+        if (this.invincible) return;
+        this.sound.play('hurt', { volume: 0.9 });
+        let remaining = this.hud.loseHeart();
+        if (remaining > 0) remaining = this.hud.loseHeart();
+        if (remaining <= 0) { this._gameOver(); return; }
+        this.invincible = true;
+        this.tweens.add({
+            targets: this.player, alpha: 0, duration: 100, repeat: 8, yoyo: true,
+            onComplete: () => { this.player.setAlpha(1); this.invincible = false; },
         });
     }
 
@@ -410,7 +761,7 @@ export class Start extends Phaser.Scene {
             cont.on('pointerout', () => cont.setStyle({ color: '#ffffff' }));
             cont.on('pointerdown', () => {
                 this.bgMusic.stop();
-                this.scene.start('Start', { level: this.levelIndex, score: this.hud.score, time: this.hud.elapsed, name: this.playerName });
+                this.scene.start('Start', { level: this.levelIndex, score: this.hud.score, time: this.hud.elapsed, name: this.playerName, hp: 5 });
             });
 
             menu.on('pointerover', () => menu.setStyle({ color: '#ffffff' }));
@@ -500,6 +851,7 @@ export class Start extends Phaser.Scene {
         this.background.tilePositionX = this.cameras.main.scrollX * 0.3;
         this.hud.update(delta);
         this.mushrooms?.getChildren().forEach(m => m.update(this.player.x));
+        this.boss?.update(this.player.x, this.player.y);
 
         const { left, right, up } = this.cursors;
         const isShift = this.shiftKey.isDown;
