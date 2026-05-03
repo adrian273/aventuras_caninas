@@ -2,9 +2,11 @@ const PRIZES = [
     { name: '500 pesos', weight: 25, color: 0xf1c40f },
     { name: '800 pesos', weight: 13, color: 0xe67e22 },
     { name: 'Sigue participando XD', weight: 10, color: 0x555555 },
-    { name: '1 Galleta', weight: 8, color: 0x9b59b6 },
+    { name: '1 Galleta', weight: 9, color: 0x9b59b6 },
     { name: '1 Dorito', weight: 6, color: 0xe74c3c },
-    { name: '1 Helado', weight: 4, color: 0x3498db },
+    { name: '1 Helado', weight: 8, color: 0x3498db },
+    { name: '1 Jugo de AloeVera Coco', weight: 4, color: 0x3498db },
+    { name: '1 Peluche', weight: 8, color: 0x3498db },
     { name: '1 Squishie', weight: 20, color: 0x2ecc71 },
     { name: '1500 pesos', weight: 30, color: 0xff6b9d },
     { name: '5 Squishies', weight: 20, color: 0x1abc9c },
@@ -12,7 +14,7 @@ const PRIZES = [
     { name: '¡Lo que quieras tu!', weight: 5, color: 0xff4444 },
 ];
 
-const ONE_TIME = new Set(['1 Galleta', '1 Dorito', '¡Lo que quieras tu!']);
+const ONE_TIME = new Set(['1 Galleta', '1 Dorito', '¡Lo que quieras tu!', '1 Peluche']);
 
 function getActivePrizes() {
     const claimed = JSON.parse(localStorage.getItem('claimedPrizes') || '[]');

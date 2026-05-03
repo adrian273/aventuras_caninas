@@ -30,9 +30,11 @@ export class Start extends Phaser.Scene {
     init(data) {
         this.levelIndex = data.level ?? 0;
         this.carryScore = data.score ?? 0;
-        this.carryTime  = data.time  ?? 0;
-        this.carryHp    = data.hp    ?? 5;
-        this.playerName = data.name ?? JSON.parse(localStorage.getItem('gameSave') || '{}').name ?? 'Jugador';
+        this.carryTime = data.time ?? 0;
+        this.carryHp = data.hp ?? 5;
+        this.carryAmmo = data.ammo ?? 0;
+        const save = JSON.parse(localStorage.getItem('gameSave') || '{}');
+        this.playerName = data.name ?? save.name ?? 'Jugador';
         this._levelDone = false;
     }
 
@@ -132,6 +134,8 @@ export class Start extends Phaser.Scene {
     }
 
     create() {
+        this._createFireballTexture();
+
         this._loadingObjs?.forEach(o => o.destroy());
         this._loadingObjs = null;
 
@@ -213,6 +217,35 @@ export class Start extends Phaser.Scene {
         });
         this.physics.add.overlap(this.player, this.lavaGroup, () => this._hitEnemy());
 
+        this.fireballs = this.physics.add.group();
+        this.physics.add.collider(this.fireballs, ground, (fb) => fb.destroy());
+        this.physics.add.collider(this.fireballs, this.platforms, (fb) => fb.destroy());
+
+        this.physics.add.overlap(this.fireballs, this.enemies, (fb, enemy) => {
+            fb.destroy();
+            if (enemy.active) {
+                enemy.destroy();
+                this.sound.play('explosion', { volume: 0.5 });
+            }
+        });
+
+        this.physics.add.overlap(this.fireballs, this.mushrooms, (fb, mush) => {
+            fb.destroy();
+            if (mush.active) {
+                mush.destroy();
+                this.sound.play('explosion', { volume: 0.5 });
+            }
+        });
+
+        this.physics.add.overlap(this.boss, this.fireballs, (boss, fb) => {
+            fb.destroy();
+            if (boss.active) {
+                const dead = boss.takeHit();
+                this.sound.play('explosion', { volume: 0.5 });
+                if (dead) this._killBoss(boss);
+            }
+        });
+
         this.physics.add.overlap(this.player, this.coins, (_p, coin) => {
             coin.destroy();
             this.hud.addCoin();
@@ -246,7 +279,53 @@ export class Start extends Phaser.Scene {
             }
         }, null, this);
 
-        this.hud = new HUD(this, this.levelIndex, this.carryHp);
+        this.fireballPickups = this.physics.add.group();
+        const pickupCount = Phaser.Math.Between(3, 5);
+        for (let i = 0; i < pickupCount; i++) {
+            const px = Phaser.Math.Between(-4000, WORLD_END - 1000);
+            const pickup = this.add.text(px, 300, '🔥', { fontSize: '48px' });
+            this.physics.add.existing(pickup);
+            pickup.body.setBounce(0.5);
+            pickup.body.setCollideWorldBounds(true);
+            this.fireballPickups.add(pickup);
+        }
+        this.physics.add.collider(this.fireballPickups, ground);
+        this.physics.add.collider(this.fireballPickups, this.platforms);
+        this.physics.add.overlap(this.player, this.fireballPickups, (player, pickup) => {
+            pickup.destroy();
+            this.hud.addAmmo(10);
+            this.sound.play('power_up', { volume: 0.6 });
+
+            const burst = this.add.particles(pickup.x, pickup.y, 'fx_particle', {
+                speed: { min: 50, max: 150 },
+                scale: { start: 1, end: 0 },
+                alpha: { start: 1, end: 0 },
+                lifespan: 600,
+                tint: [0xffaa00, 0xff5500, 0xffff00],
+                emitting: false,
+                blendMode: 'ADD',
+            });
+            burst.explode(15, pickup.x, pickup.y);
+            this.time.delayedCall(700, () => burst.destroy());
+
+            const playerAura = this.add.particles(0, 0, 'fx_particle', {
+                speed: { min: 20, max: 100 },
+                scale: { start: 1.5, end: 0 },
+                alpha: { start: 0.8, end: 0 },
+                lifespan: 800,
+                tint: [0xffaa00, 0xff2200, 0xffff00],
+                blendMode: 'ADD',
+                frequency: 20,
+                emitZone: { type: 'random', source: new Phaser.Geom.Circle(0, 0, 40) }
+            });
+            playerAura.startFollow(player);
+            this.time.delayedCall(1500, () => {
+                playerAura.stop();
+                this.time.delayedCall(1000, () => playerAura.destroy());
+            });
+        });
+
+        this.hud = new HUD(this, this.levelIndex, this.carryHp, this.carryAmmo);
         this.hud.score = this.carryScore;
         this.hud.elapsed = this.carryTime;
         this.hud._nextLifeAt = (Math.floor(this.carryScore / 50) + 1) * 50;
@@ -257,8 +336,10 @@ export class Start extends Phaser.Scene {
         this.cursors = this.input.keyboard.createCursorKeys();
         this.shiftKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
         this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+        this.xKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X);
+        this.lastFired = 0;
 
-        this.mobileInput = { left: false, right: false, up: false };
+        this.mobileInput = { left: false, right: false, up: false, fire: false };
         this._createMobileButtons();
 
         this.player.play('idle_blink');
@@ -268,12 +349,12 @@ export class Start extends Phaser.Scene {
     }
 
     _generateTerrainSegments() {
-        const level     = this.levelIndex;
+        const level = this.levelIndex;
         const lastLevel = BACKGROUNDS.length - 1;
         const lavaLevel = level % 3 === 0 || level === lastLevel;
-        const NO_LAVA   = ['grass', 'dirt', 'water'];
-        const ALL       = ['grass', 'dirt', 'water', 'lava'];
-        const BOSS_X    = WORLD_END - 650;
+        const NO_LAVA = ['grass', 'dirt', 'water'];
+        const ALL = ['grass', 'dirt', 'water', 'lava'];
+        const BOSS_X = WORLD_END - 650;
 
         const segments = [];
         let x = -5000;
@@ -285,13 +366,13 @@ export class Start extends Phaser.Scene {
         while (x < 5000) {
             let w, type;
             if (lavaLevel) {
-                w    = Phaser.Math.Between(500, 1800);
+                w = Phaser.Math.Between(500, 1800);
                 type = Phaser.Math.RND.pick(ALL);
             } else if (Math.random() < 0.15) {
-                w    = Phaser.Math.Between(180, 340);
+                w = Phaser.Math.Between(180, 340);
                 type = 'lava';
             } else {
-                w    = Phaser.Math.Between(500, 1800);
+                w = Phaser.Math.Between(500, 1800);
                 type = Phaser.Math.RND.pick(NO_LAVA);
             }
             const end = Math.min(x + w, 5050);
@@ -309,9 +390,9 @@ export class Start extends Phaser.Scene {
     _buildGround() {
         const COLORS = {
             grass: { base: 0x3a7d1e, top: 0x5cb82e },
-            dirt:  { base: 0x7a4a1e, top: 0x9b6235 },
+            dirt: { base: 0x7a4a1e, top: 0x9b6235 },
             water: { base: 0x1a5ea8, top: 0x3a8fd4 },
-            lava:  { base: 0xcc2200, top: 0xff6600 },
+            lava: { base: 0xcc2200, top: 0xff6600 },
         };
         const HAZARD = new Set(['water', 'lava']);
 
@@ -319,7 +400,7 @@ export class Start extends Phaser.Scene {
         this.terrainSegments = segments;
         const group = this.physics.add.staticGroup();
         this.hazardGroup = this.physics.add.staticGroup();
-        this.lavaGroup   = this.physics.add.staticGroup();
+        this.lavaGroup = this.physics.add.staticGroup();
 
         if (!this.textures.exists('fx_particle')) {
             const g = this.make.graphics({ add: false });
@@ -413,13 +494,13 @@ export class Start extends Phaser.Scene {
 
     _buildHazardPlatforms() {
         const HAZARD_TYPES = new Set(['water', 'lava']);
-        const BOSS_CLEAR   = WORLD_END - 1000;
+        const BOSS_CLEAR = WORLD_END - 1000;
         this.terrainSegments
             .filter(s => HAZARD_TYPES.has(s.type) && s.x < BOSS_CLEAR)
             .forEach(({ x, w }) => {
-                const left  = x - w / 2;
+                const left = x - w / 2;
                 const count = w < 900 ? 2 : 3;
-                const step  = w / (count + 1);
+                const step = w / (count + 1);
                 for (let i = 1; i <= count; i++) {
                     const px = left + step * i + Phaser.Math.Between(-50, 50);
                     const pw = Phaser.Math.Between(90, 150);
@@ -459,8 +540,8 @@ export class Start extends Phaser.Scene {
     }
 
     _buildBarrier() {
-        const bx     = WORLD_END - 280;
-        const top    = -50;
+        const bx = WORLD_END - 280;
+        const top = -50;
         const height = 820;
 
         const wall = this.add.rectangle(bx, top + height / 2, 24, height);
@@ -474,8 +555,8 @@ export class Start extends Phaser.Scene {
             emitZone: { type: 'random', source: zone },
             speedX: { min: -22, max: 22 },
             speedY: { min: -10, max: 10 },
-            scale:  { start: 0.7, end: 0 },
-            alpha:  { start: 1,   end: 0 },
+            scale: { start: 0.7, end: 0 },
+            alpha: { start: 1, end: 0 },
             lifespan: { min: 400, max: 750 },
             tint: [0xaa00ff, 0xdd44ff, 0xff88ff, 0x7700cc, 0xffffff],
             frequency: 8,
@@ -487,8 +568,8 @@ export class Start extends Phaser.Scene {
         this.barrierGlow = this.add.particles(0, 0, 'fx_particle', {
             emitZone: { type: 'random', source: zone },
             speedX: 0, speedY: 0,
-            scale:  { start: 1.2, end: 0 },
-            alpha:  { start: 0.25, end: 0 },
+            scale: { start: 1.2, end: 0 },
+            alpha: { start: 0.25, end: 0 },
             lifespan: { min: 200, max: 450 },
             tint: [0xcc44ff],
             frequency: 18,
@@ -508,9 +589,9 @@ export class Start extends Phaser.Scene {
 
     _buildFlagpole() {
         const x = WORLD_END - 100;
-        const poleTop    = 160;
+        const poleTop = 160;
         const poleBottom = 710;
-        const poleH      = poleBottom - poleTop;
+        const poleH = poleBottom - poleTop;
 
         const g = this.add.graphics();
 
@@ -603,7 +684,7 @@ export class Start extends Phaser.Scene {
                 next.on('pointerdown', () => {
                     this._writeSave(this.levelIndex + 1);
                     this.bgMusic.stop();
-                    this.scene.start('Start', { level: this.levelIndex + 1, score: this.hud.score, time: this.hud.elapsed, name: this.playerName, hp: this.hud.hp });
+                    this.scene.start('Start', { level: this.levelIndex + 1, score: this.hud.score, time: this.hud.elapsed, name: this.playerName, hp: this.hud.hp, ammo: this.hud.ammo });
                 });
 
                 menu.on('pointerover', () => menu.setStyle({ color: '#ffffff' }));
@@ -761,7 +842,7 @@ export class Start extends Phaser.Scene {
             cont.on('pointerout', () => cont.setStyle({ color: '#ffffff' }));
             cont.on('pointerdown', () => {
                 this.bgMusic.stop();
-                this.scene.start('Start', { level: this.levelIndex, score: this.hud.score, time: this.hud.elapsed, name: this.playerName, hp: 5 });
+                this.scene.start('Start', { level: this.levelIndex, score: this.hud.score, time: this.hud.elapsed, name: this.playerName, hp: 5, ammo: 0 });
             });
 
             menu.on('pointerover', () => menu.setStyle({ color: '#ffffff' }));
@@ -783,6 +864,7 @@ export class Start extends Phaser.Scene {
             level,
             score: this.hud.score,
             time: this.hud.elapsed,
+            ammo: this.hud.ammo,
         }));
     }
 
@@ -791,6 +873,7 @@ export class Start extends Phaser.Scene {
         const zones = [
             { x: 100, y: 625, key: 'left', label: '←' },
             { x: 265, y: 625, key: 'right', label: '→' },
+            { x: 1000, y: 625, key: 'fire', label: '🔥' },
             { x: 1170, y: 625, key: 'up', label: '↑' },
         ];
         const bgMap = {};
@@ -801,9 +884,11 @@ export class Start extends Phaser.Scene {
             bg.fillRoundedRect(-S, -S, S * 2, S * 2, 24);
             bg.lineStyle(3, 0xffffff, 0.5);
             bg.strokeRoundedRect(-S, -S, S * 2, S * 2, 24);
-            const text = this.add.text(0, 0, label, { fontSize: '58px', color: '#ffffff', fontFamily: 'Arial' }).setOrigin(0.5);
-            this.add.container(x, y, [bg, text]).setScrollFactor(0).setDepth(10);
+
+            const content = this.add.text(0, 0, label, { fontSize: '58px', color: '#ffffff', fontFamily: 'Arial' }).setOrigin(0.5);
+            const container = this.add.container(x, y, [bg, content]).setScrollFactor(0).setDepth(10);
             bgMap[key] = bg;
+            if (key === 'fire') this.fireBtnContainer = container;
         });
 
         const hitTest = (px, py) => zones.filter(z => Math.abs(px - z.x) <= S && Math.abs(py - z.y) <= S).map(z => z.key);
@@ -814,6 +899,7 @@ export class Start extends Phaser.Scene {
             this.mobileInput.left = false;
             this.mobileInput.right = false;
             this.mobileInput.up = false;
+            this.mobileInput.fire = false;
             activePointers.forEach(keys => keys.forEach(k => { this.mobileInput[k] = true; }));
             zones.forEach(({ key }) => {
                 const bg = bgMap[key];
@@ -847,11 +933,17 @@ export class Start extends Phaser.Scene {
         this.input.on('pointerupoutside', pointer => { activePointers.delete(pointer.id); sync(); });
     }
 
-    update(_, delta) {
+    update(time, delta) {
+        if (this.hud && this.hud.isPaused) return;
+
         this.background.tilePositionX = this.cameras.main.scrollX * 0.3;
         this.hud.update(delta);
         this.mushrooms?.getChildren().forEach(m => m.update(this.player.x));
         this.boss?.update(this.player.x, this.player.y);
+
+        if (this.fireBtnContainer && this.hud) {
+            this.fireBtnContainer.setVisible(this.hud.ammo > 0);
+        }
 
         const { left, right, up } = this.cursors;
         const isShift = this.shiftKey.isDown;
@@ -859,6 +951,14 @@ export class Start extends Phaser.Scene {
         const goLeft = left.isDown || this.mobileInput.left;
         const goRight = right.isDown || this.mobileInput.right;
         const goUp = up.isDown || this.spaceKey.isDown || this.mobileInput.up;
+        const fireDown = this.xKey.isDown || this.mobileInput.fire;
+
+        if (fireDown && time > this.lastFired + 300) {
+            if (this.hud.useAmmo()) {
+                this.lastFired = time;
+                this._shootFireball();
+            }
+        }
 
         if (goLeft) {
             this.player.setVelocityX(isShift ? -300 : -160);
@@ -882,5 +982,80 @@ export class Start extends Phaser.Scene {
         if (!onGround && this.player.anims.currentAnim?.key !== 'jump') {
             this.player.play('jump', true);
         }
+    }
+
+    _createFireballTexture() {
+        if (this.textures.exists('fireball')) return;
+        const g = this.make.graphics({ add: false });
+        g.fillStyle(0xff2200, 0.3);
+        g.fillCircle(16, 16, 16);
+        g.fillStyle(0xff6600, 0.6);
+        g.fillCircle(16, 16, 12);
+        g.fillStyle(0xffaa00, 0.9);
+        g.fillCircle(16, 16, 8);
+        g.fillStyle(0xffffff, 1);
+        g.fillCircle(16, 16, 4);
+        g.generateTexture('fireball', 32, 32);
+        g.destroy();
+    }
+
+    _shootFireball() {
+        if (!this.player || !this.player.active) return;
+
+        const fb = this.fireballs.create(this.player.x, this.player.y + 10, 'fireball');
+        if (!fb) return;
+
+        fb.setDepth(2);
+        fb.body.setAllowGravity(false);
+
+        const dir = this.player.flipX ? -1 : 1;
+        fb.setVelocityX(dir * 550);
+
+        this.tweens.add({ targets: fb, angle: 360, duration: 400, repeat: -1 });
+
+        const emitter = this.add.particles(fb.x, fb.y, 'fx_particle', {
+            scale: { start: 1.8, end: 0 },
+            alpha: { start: 1, end: 0 },
+            speedX: { min: -30, max: 30 },
+            speedY: { min: -40, max: 10 },
+            lifespan: { min: 250, max: 450 },
+            tint: [0xffff00, 0xff8800, 0xff2200, 0xaa0000],
+            frequency: 12,
+            quantity: 3,
+            blendMode: 'ADD',
+            depth: 2,
+        });
+        emitter.startFollow(fb);
+
+        this.time.delayedCall(1200, () => {
+            if (emitter && !emitter.destroyed) emitter.destroy();
+            if (fb.active) fb.destroy();
+        });
+
+        // Also destroy emitter when fireball is destroyed manually on hit
+        fb.on('destroy', () => {
+            if (emitter && !emitter.destroyed) {
+                emitter.stop();
+                this.time.delayedCall(500, () => {
+                    if (!emitter.destroyed) emitter.destroy();
+                });
+            }
+        });
+
+        const playerAura = this.add.particles(0, 0, 'fx_particle', {
+            speed: { min: 20, max: 100 },
+            scale: { start: 1.5, end: 0 },
+            alpha: { start: 0.8, end: 0 },
+            lifespan: 600,
+            tint: [0xffaa00, 0xff2200, 0xffff00],
+            blendMode: 'ADD',
+            frequency: 15,
+            emitZone: { type: 'random', source: new Phaser.Geom.Circle(0, 0, 40) }
+        });
+        playerAura.startFollow(this.player);
+        this.time.delayedCall(300, () => {
+            playerAura.stop();
+            this.time.delayedCall(1000, () => playerAura.destroy());
+        });
     }
 }
